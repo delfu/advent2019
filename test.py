@@ -2,7 +2,7 @@ class __TestCase__:
     def __init__(self, result):
         self.result = result
 
-    def equals(self, comparison):
+    def toEqual(self, comparison):
         assert self.result == comparison
         return self
 
