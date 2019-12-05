@@ -12,103 +12,97 @@ class IntCodes:
             99: self.__noop__,
         }
         self.input = None
+        self.stack = []
 
-    def __dereference__(self, modes, stack, *vals):
+    def __dereference__(self, modes, *vals):
         for i in range(len(vals)):
             m = modes[i]
             if m == "0":
-                yield stack[vals[i]]
+                if vals[i] > len(self.stack):
+                    raise BufferError("Dereferencing beyond program memory")
+                yield self.stack[vals[i]]
             elif m == "1":
                 yield vals[i]
 
-    def __validate__(self, stack, index, read_len, modes):
-        if index + read_len > len(stack):
-            raise BufferError
+    def __validate__(self, index, read_len, modes):
+        if index + read_len > len(self.stack):
+            raise BufferError("Reading beyond the program memory")
         # pad modes to be same len as arguments
-        if len(modes) < read_len:
-            modes += "0" * (read_len - len(modes))
+        modes += "0" * (read_len - len(modes))
 
-        args = [None for i in range(index, index + read_len)]
-        for i in range(len(args)):
-            m = modes[i]
-            if m == "0":  # positional/addressing mode
-                addr = stack[index + i]
-                if addr > len(stack):
-                    raise BufferError
-                args[i] = addr
-            elif m == "1":  # immediate mode, just read as val
-                args[i] = stack[index + i]
+        args = [self.stack[i] for i in range(index, index + read_len)]
+
         return args, modes
 
-    def __addi__(self, stack, index, modes):
-        validated, modes = self.__validate__(stack, index, 3, modes)
+    def __addi__(self, index, modes):
+        validated, modes = self.__validate__(index, 3, modes)
         a, b, store_at = validated
-        a, b = self.__dereference__(modes, stack, a, b)
-        stack[store_at] = a + b
+        a, b = self.__dereference__(modes, a, b)
+        self.stack[store_at] = a + b
         return index + 3
 
-    def __mult__(self, stack, index, modes):
-        validated, modes = self.__validate__(stack, index, 3, modes)
+    def __mult__(self, index, modes):
+        validated, modes = self.__validate__(index, 3, modes)
         a, b, store_at = validated
-        a, b = self.__dereference__(modes, stack, a, b)
-        stack[store_at] = a * b
+        a, b = self.__dereference__(modes, a, b)
+        self.stack[store_at] = a * b
         return index + 3
 
-    def __input__(self, stack, index, modes):
-        """read from input and store at next pointer
+    def __input__(self, index, modes):
+        """Read from input and store at next pointer
         
         Returns:
             index + 1
         """
-        validated, modes = self.__validate__(stack, index, 1, modes)
+        validated, modes = self.__validate__(index, 1, modes)
         store_at = validated[0]
         if not self.input:
             raise ValueError("program executed without providing input")
-        stack[store_at] = self.input
+        self.stack[store_at] = self.input
         return index + 1
 
-    def __output__(self, stack, index, modes):
+    def __output__(self, index, modes):
         """Prints
         """
-        validated, modes = self.__validate__(stack, index, 1, modes)
-        print(stack[validated[0]] if modes[0] == "0" else validated[0])
+        validated, modes = self.__validate__(index, 1, modes)
+        print(self.stack[validated[0]] if modes[0] == "0" else validated[0])
         return index + 1
 
-    def __noop__(self, stack, index, modes):
-        return len(stack)
+    def __noop__(self, index, modes):
+        return len(self.stack)
 
-    def __jump_true__(self, stack, index, modes):
+    def __jump_true__(self, index, modes):
         """Move execution pointer to 2nd param if 1st != 0
         """
-        validated, modes = self.__validate__(stack, index, 2, modes)
+        validated, modes = self.__validate__(index, 2, modes)
         a, b = validated
-        a, b = self.__dereference__(modes, stack, a, b)
+        a, b = self.__dereference__(modes, a, b)
         return b if a != 0 else index + 2
 
-    def __jump_false__(self, stack, index, modes):
+    def __jump_false__(self, index, modes):
         """Move execution pointer to 2nd param if 1st == 0
         """
-        validated, modes = self.__validate__(stack, index, 2, modes)
+        validated, modes = self.__validate__(index, 2, modes)
         a, b = validated
-        a, b = self.__dereference__(modes, stack, a, b)
+        a, b = self.__dereference__(modes, a, b)
         return b if a == 0 else index + 2
 
-    def __less_than__(self, stack, index, modes):
+    def __less_than__(self, index, modes):
         """Store 1 in 3rd param if 1st < 2nd
         """
-        validated, modes = self.__validate__(stack, index, 3, modes)
+        validated, modes = self.__validate__(index, 3, modes)
         a, b, store_at = validated
-        a, b = self.__dereference__(modes, stack, a, b)
-        stack[store_at] = 1 if a < b else 0
+        a, b = self.__dereference__(modes, a, b)
+        self.stack[store_at] = 1 if a < b else 0
         return index + 3
 
-    def __equals__(self, stack, index, modes):
+    def __equals__(self, index, modes):
         """Store 1 in 3rd param if 1st = 2nd
         """
-        validated, modes = self.__validate__(stack, index, 3, modes)
+        validated, modes = self.__validate__(index, 3, modes)
         a, b, store_at = validated
-        a, b = self.__dereference__(modes, stack, a, b)
-        stack[store_at] = 1 if a == b else 0
+        a, b = self.__dereference__(modes, a, b)
+        self.stack[store_at] = 1 if a == b else 0
         return index + 3
 
     def run_program(self, program, input=None):
@@ -124,13 +118,14 @@ class IntCodes:
             Exit code, memory
         """
         self.input = input
+        self.stack = program
 
-        if len(program) < 1:
+        if len(self.stack) < 1:
             return
         exit_code = 0
-        curr = 0
-        while curr < len(program) - 1:
-            op = str(program[curr])
+        ptr = 0
+        while ptr < len(self.stack):
+            op = str(self.stack[ptr])
             modes = op[:-2][::-1]  # parameter modes
             op = int(op[-2:])
 
@@ -138,11 +133,10 @@ class IntCodes:
                 raise Exception("unknown op code", op)
             try:
                 func = self.op_codes[op]
-                if func:
-                    curr = func(program, curr + 1, modes)
+                ptr = func(ptr + 1, modes)
             except (ValueError, BufferError) as e:
                 print(e)
                 exit_code = 1
                 break
         print("Program exited with exit code: " + str(exit_code))
-        return exit_code, program
+        return exit_code, self.stack
