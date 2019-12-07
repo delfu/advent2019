@@ -11,7 +11,7 @@ class IntCodes:
             8: self.__equals__,
             99: self.__noop__,
         }
-        self.input = None
+        self.input = []
         self.stack = []
 
     def __dereference__(self, modes, *vals):
@@ -39,14 +39,14 @@ class IntCodes:
         a, b, store_at = validated
         a, b = self.__dereference__(modes, a, b)
         self.stack[store_at] = a + b
-        return index + 3
+        return index + 3, None
 
     def __mult__(self, index, modes):
         validated, modes = self.__validate__(index, 3, modes)
         a, b, store_at = validated
         a, b = self.__dereference__(modes, a, b)
         self.stack[store_at] = a * b
-        return index + 3
+        return index + 3, None
 
     def __input__(self, index, modes):
         """Read from input and store at next pointer
@@ -56,20 +56,20 @@ class IntCodes:
         """
         validated, modes = self.__validate__(index, 1, modes)
         store_at = validated[0]
-        if not self.input:
+        if len(self.input) == 0:
             raise ValueError("program executed without providing input")
-        self.stack[store_at] = self.input
-        return index + 1
+        self.stack[store_at] = self.input.pop(0)
+        return index + 1, None
 
     def __output__(self, index, modes):
         """Prints
         """
         validated, modes = self.__validate__(index, 1, modes)
-        print(self.stack[validated[0]] if modes[0] == "0" else validated[0])
-        return index + 1
+        output = self.stack[validated[0]] if modes[0] == "0" else validated[0]
+        return index + 1, output
 
     def __noop__(self, index, modes):
-        return len(self.stack)
+        return len(self.stack), None
 
     def __jump_true__(self, index, modes):
         """Move execution pointer to 2nd param if 1st != 0
@@ -77,7 +77,7 @@ class IntCodes:
         validated, modes = self.__validate__(index, 2, modes)
         a, b = validated
         a, b = self.__dereference__(modes, a, b)
-        return b if a != 0 else index + 2
+        return (b if a != 0 else index + 2), None
 
     def __jump_false__(self, index, modes):
         """Move execution pointer to 2nd param if 1st == 0
@@ -85,7 +85,7 @@ class IntCodes:
         validated, modes = self.__validate__(index, 2, modes)
         a, b = validated
         a, b = self.__dereference__(modes, a, b)
-        return b if a == 0 else index + 2
+        return (b if a == 0 else index + 2), None
 
     def __less_than__(self, index, modes):
         """Store 1 in 3rd param if 1st < 2nd
@@ -94,7 +94,7 @@ class IntCodes:
         a, b, store_at = validated
         a, b = self.__dereference__(modes, a, b)
         self.stack[store_at] = 1 if a < b else 0
-        return index + 3
+        return index + 3, None
 
     def __equals__(self, index, modes):
         """Store 1 in 3rd param if 1st = 2nd
@@ -103,9 +103,9 @@ class IntCodes:
         a, b, store_at = validated
         a, b = self.__dereference__(modes, a, b)
         self.stack[store_at] = 1 if a == b else 0
-        return index + 3
+        return index + 3, None
 
-    def run_program(self, program, input=None):
+    def run_program(self, program, input=[]):
         """Runs a program. To see supported op_codes, refer to __doc__
         
         Arguments:
@@ -122,7 +122,6 @@ class IntCodes:
 
         if len(self.stack) < 1:
             return
-        exit_code = 0
         ptr = 0
         while ptr < len(self.stack):
             op = str(self.stack[ptr])
@@ -133,10 +132,10 @@ class IntCodes:
                 raise Exception("unknown op code", op)
             try:
                 func = self.op_codes[op]
-                ptr = func(ptr + 1, modes)
+                ptr, output = func(ptr + 1, modes)
+                if output is not None or op == 99:
+                    yield output
             except (ValueError, BufferError) as e:
                 print(e)
-                exit_code = 1
                 break
-        print("Program exited with exit code: " + str(exit_code))
-        return exit_code, self.stack
+        # print("Program exited with exit code: " + str(exit_code))

@@ -14,4 +14,4 @@ with open("5.in") as program_file:
     program = program.split(",")
     program = list(map(lambda x: int(x), program))
 
-    runner.run_program(program, 5)
+    runner.run_program(program, [5])
